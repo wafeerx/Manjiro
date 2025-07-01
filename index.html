@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Advanced Dot Canvas - Auto Color by Level</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    /* ... CSS sama seperti sebelumnya ... */
+    :root {
+      --primary-bg: #f0f0f0; --secondary-bg: #ffffff; --text-color: #333; --border-color: #ccc;
+      --accent-color: #007bff; --button-bg: #e0e0e0; --button-hover-bg: #d0d0d0; --button-active-bg: #c0c0c0;
+      --canvas-bg: #ffffff; --canvas-border: #333; --grid-cell-color: #ddd; --center-cell-color: gold;
+      --grid-border-color: #999; --shadow-color: rgba(0, 0, 0, 0.2); --hover-shadow-color: rgba(0, 0, 0, 0.3);
+      --context-menu-bg: #ffffff; --context-menu-border: #ccc; --context-menu-hover-bg: #f0f0f0;
+      --tooltip-bg: rgba(0, 0, 0, 0.8); --tooltip-text: white;
+    }
+    body[data-theme="dark"] {
+      --primary-bg: #1a1a1a; --secondary-bg: #2b2b2b; --text-color: #e0e0e0; --border-color: #555;
+      --accent-color: #72aeff; --button-bg: #3c3c3c; --button-hover-bg: #4a4a4a; --button-active-bg: #5a5a5a;
+      --canvas-bg: #202020; --canvas-border: #777; --grid-cell-color: #383838; --center-cell-color: #b8860b;
+      --grid-border-color: #666; --shadow-color: rgba(0, 0, 0, 0.5); --hover-shadow-color: rgba(255, 255, 255, 0.3);
+      --context-menu-bg: #3b3b3b; --context-menu-border: #666; --context-menu-hover-bg: #4a4a4a;
+      --tooltip-bg: rgba(255, 255, 255, 0.9); --tooltip-text: #1a1a1a;
+    }
+    body {
+      margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: start;
+      padding: 15px; background: var(--primary-bg); font-family: 'Roboto', sans-serif;
+      color: var(--text-color); transition: background-color 0.3s ease, color 0.3s ease;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    canvas {
+      border: 2px solid var(--canvas-border); background-color: var(--canvas-bg); margin-top: 15px;
+      cursor: grab; touch-action: none; max-width: 100%; height: auto;
+      box-shadow: 0 4px 10px var(--shadow-color);
+      transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    canvas:active { cursor: grabbing; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%;
+      box-sizing: border-box; padding: 10px 15px; background-color: var(--secondary-bg);
+      border-radius: 8px; box-shadow: 0 2px 8px var(--shadow-color);
+      transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .toolbar label { display: flex; align-items: center; gap: 5px; font-size: 14px; color: var(--text-color); }
+    select, button, input {
+      padding: 8px 12px; font-size: 14px; margin: 0; border: 1px solid var(--border-color);
+      border-radius: 5px; background-color: var(--button-bg); color: var(--text-color);
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+      outline: none;
+    }
+    input::placeholder { color: var(--text-color); opacity: 0.7; }
+    button { cursor: pointer; font-weight: 500; min-width: 100px; }
+    button:hover { background-color: var(--button-hover-bg); border-color: var(--accent-color); }
+    button:active { background-color: var(--button-active-bg); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); }
+    .toolbar-hidden { display: none !important; }
+    #contextMenu {
+      position: absolute; background: var(--context-menu-bg); border: 1px solid var(--context-menu-border);
+      border-radius: 4px; box-shadow: 0 2px 8px var(--shadow-color); z-index: 1000;
+      min-width: 120px; display: none; color: var(--text-color);
+      transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
+    }
+    .menu-item { padding: 10px 15px; cursor: pointer; transition: background 0.2s; }
+    .menu-item:hover { background: var(--context-menu-hover-bg); }
+    
+    /* CSS untuk undo/redo */
+    .button-group {
+      display: flex;
+      gap: 4px;
+    }
+    .half-button {
+      min-width: 50px !important;
+    }
+    
+    /* Tambahan untuk legenda level */
+    .level-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 10px 0;
+      padding: 10px;
+      background-color: var(--secondary-bg);
+      border-radius: 8px;
+      box-shadow: 0 2px 8px var(--shadow-color);
+      width: 100%;
+      box-sizing: border-box;
+      justify-content: center;
+    }
+    .level-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 14px;
+      color: var(--text-color);
+    }
+    .color-box {
+      width: 14px;
+      height: 14px;
+      display: inline-block;
+      border: 1px solid var(--border-color);
+    }
+    
+    @media (max-width: 768px) {
+      .toolbar label, .toolbar select, .toolbar button, .toolbar input { width: calc(50% - 4px); box-sizing: border-box; }
+      .toolbar label { width: 100%; justify-content: center; }
+      .toolbar input { width: calc(50% - 4px); }
+      #searchX, #searchY { flex-grow: 1; }
+      #searchBtn, #addDotBtn, #saveBtn, #themeToggle, #updateAllColorsBtn { width: 100%; }
+      #deleteSelectedDotBtn, #changeSelectedDotColorBtn { width: 100%; }
+      .button-group { width: calc(50% - 4px); }
+      .half-button { width: calc(50% - 2px) !important; }
+    }
+    @media (max-width: 480px) {
+      .toolbar { padding: 8px; gap: 6px; }
+      .toolbar label, .toolbar select, .toolbar button, .toolbar input { width: 100%; }
+      .button-group { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <label>Server:
+      <select id="serverSelect"></select>
+    </label>
+
+    <label>Warna Titik (untuk edit):
+      <select id="colorPicker">
+        <option value="red">Merah</option>
+        <option value="green">Hijau</option>
+        <option value="blue">Biru</option>
+        <option value="yellow">Kuning</option>
+        <option value="magenta">Magenta</option>
+        <option value="cyan">Cyan</option>
+        <option value="purple">Ungu</option>
+      </select>
+    </label>
+    
+    <div class="button-group">
+      <button id="undoButton" class="half-button">Undo</button>
+      <button id="redoButton" class="half-button">Redo</button>
+    </div>
+    
+    <input type="number" id="searchX" placeholder="X Coord." autocomplete="off">
+    <input type="number" id="searchY" placeholder="Y Coord." autocomplete="off">
+    <button id="searchBtn">Search</button>
+    <button id="addDotBtn">Tambah Titik</button>
+    <button id="saveBtn">Simpan Titik</button>
+    <button id="updateAllColorsBtn">Update Semua Warna</button>
+    <button id="themeToggle">Mode Gelap</button>
+    <button id="importOldDataBtn">Import Data Lama (Root)</button> <!-- TOMBOL BARU -->
+
+    <button id="deleteSelectedDotBtn" class="toolbar-hidden">Hapus Titik Terpilih</button>
+    <button id="changeSelectedDotColorBtn" class="toolbar-hidden">Ganti Warna Terpilih</button>
+  </div>
+
+  <canvas id="gridCanvas" width="1000" height="1000"></canvas>
+  
+  <!-- Legenda level -->
+  <div class="level-legend">
+    <div class="level-item"><span class="color-box" style="background-color: red;"></span> Level 1</div>
+    <div class="level-item"><span class="color-box" style="background-color: green;"></span> Level 2</div>
+    <div class="level-item"><span class="color-box" style="background-color: blue;"></span> Level 3</div>
+    <div class="level-item"><span class="color-box" style="background-color: yellow;"></span> Level 4</div>
+    <div class="level-item"><span class="color-box" style="background-color: magenta;"></span> Level 5</div>
+    <div class="level-item"><span class="color-box" style="background-color: cyan;"></span> Level 6</div>
+    <div class="level-item"><span class="color-box" style="background-color: purple;"></span> Level 7</div>
+  </div>
+
+  <div id="contextMenu">
+    <div class="menu-item" id="deleteOption">Hapus Titik</div>
+    <div class="menu-item" id="changeColorOption">Ganti Warna</div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+    // getDatabase, ref, onValue, set, push, serverTimestamp adalah yang umum
+    // Tambahkan 'get' untuk operasi baca satu kali
+    import { getDatabase, ref, onValue, set, push, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
+    // --- PERUBAHAN: ADMIN ---
+    // Cek apakah URL mengandung '?admin=true'
+    const urlParams = new URLSearchParams(window.location.search);
+    const isAdmin = urlParams.get('admin') === 'true';
+
+    // Konfigurasi Firebase Anda
+    const firebaseConfig = {
+      apiKey: "AIzaSyCrKhvAk0mnlR3xLLbxZWwg72XAg8FVMFw",
+      authDomain: "supply-b9a71.firebaseapp.com",
+      databaseURL: "https://supply-b9a71-default-rtdb.firebaseio.com",
+      projectId: "supply-b9a71",
+      storageBucket: "supply-b9a71.firebasestorage.app",
+      messagingSenderId: "684607933887",
+      appId: "1:684607933887:web:9daad1e18f99ae40b0650a",
+      measurementId: "G-E65931C6C2"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // --- PERUBAHAN: Referensi Firebase akan menjadi dinamis ---
+    let currentDotsRef;
+    let currentHistoryRef;
+    let unsubscribeDotsListener = null; // Untuk mengelola listener Firebase
+
+    // --- Referensi ke lokasi data lama (asumsi di root /dots) ---
+    const oldRootDotsRef = ref(db, 'dots');
+
+    // Sesuaikan daftar server Anda di sini
+    const SERVER_IDS = ["1107", "1096", "1121", "1109", "1100", "1101", "1115", "1103"];
+    let currentServerId = SERVER_IDS[0]; // Server default
+
+    // DOM Elements
+    const canvas = document.getElementById('gridCanvas');
+    const ctx = canvas.getContext('2d');
+    const serverSelect = document.getElementById('serverSelect');
+    const colorPicker = document.getElementById('colorPicker');
+    const contextMenu = document.getElementById('contextMenu');
+    const deleteOption = document.getElementById('deleteOption');
+    const changeColorOption = document.getElementById('changeColorOption');
+    const undoButton = document.getElementById('undoButton');
+    const redoButton = document.getElementById('redoButton');
+    const searchX = document.getElementById('searchX');
+    const searchY = document.getElementById('searchY');
+    const searchBtn = document.getElementById('searchBtn');
+    const addDotBtn = document.getElementById('addDotBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const deleteSelectedDotBtn = document.getElementById('deleteSelectedDotBtn');
+    const changeSelectedDotColorBtn = document.getElementById('changeSelectedDotColorBtn');
+    const themeToggle = document.getElementById('themeToggle');
+    const updateAllColorsBtn = document.getElementById('updateAllColorsBtn');
+    const importOldDataBtn = document.getElementById('importOldDataBtn'); // Elemen tombol baru
+
+    let dots = [];
+    let zoom = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+    let hoveredDot = null;
+    let selectedDot = null;
+    let searchHighlight = null;
+    let isDragging = false;
+    let isClicking = false;
+    let longPressTimer = null;
+    const longPressThreshold = 500;
+    let lastMouseDownX = 0;
+    let lastMouseDownY = 0;
+    let dotUnderMouseDownIndex = null;
+    let lastPinchDistance = null;
+    let isTouching = false;
+
+    // --- FITUR BARU: UNDO/REDO ---
+    let history = [];
+    let historyIndex = -1;
+    let isUndoRedoAction = false;
+
+    // --- FITUR BARU: Variabel untuk double Enter ---
+    let lastEnterPressTime = 0;
+    const doubleEnterThreshold = 500; // Milidetik
+
+    // --- FITUR BARU: Fungsi untuk menentukan warna berdasarkan level ---
+    function getColorByLevel(x, y) {
+      const distX = Math.abs(x - 500);
+      const distY = Math.abs(y - 500);
+      const maxDist = Math.max(distX, distY);
+      
+      if (maxDist <= 50) return "purple";
+      if (maxDist <= 125) return "cyan";
+      if (maxDist <= 200) return "magenta";
+      if (maxDist <= 275) return "yellow";
+      if (maxDist <= 350) return "blue";
+      if (maxDist <= 425) return "green";
+      return "red";
+    }
+
+    // Fungsi untuk menambahkan state ke history
+    function addToHistory(action, data) {
+      if (isUndoRedoAction) return;
+      if (historyIndex < history.length - 1) {
+        history = history.slice(0, historyIndex + 1);
+      }
+      const dotsClone = JSON.parse(JSON.stringify(dots));
+      history.push({
+        dots: dotsClone,
+        action: action,
+        data: data,
+        timestamp: new Date().toISOString()
+      });
+      historyIndex = history.length - 1;
+      updateUndoRedoButtons();
+      if (history.length > 50) {
+        history.shift();
+        historyIndex--;
+      }
+    }
+
+    // Fungsi undo
+    function undo() {
+      if (historyIndex > 0) {
+        isUndoRedoAction = true;
+        historyIndex--;
+        dots = JSON.parse(JSON.stringify(history[historyIndex].dots));
+        saveToFirebase();
+        drawGrid();
+        isUndoRedoAction = false;
+        updateUndoRedoButtons();
+      }
+    }
+
+    // Fungsi redo
+    function redo() {
+      if (historyIndex < history.length - 1) {
+        isUndoRedoAction = true;
+        historyIndex++;
+        dots = JSON.parse(JSON.stringify(history[historyIndex].dots));
+        saveToFirebase();
+        drawGrid();
+        isUndoRedoAction = false;
+        updateUndoRedoButtons();
+      }
+    }
+
+    // Update status tombol undo/redo
+    function updateUndoRedoButtons() {
+      if (isAdmin) {
+        undoButton.disabled = historyIndex <= 0;
+        redoButton.disabled = historyIndex >= history.length - 1;
+        
+        undoButton.style.opacity = undoButton.disabled ? "0.5" : "1";
+        redoButton.style.opacity = redoButton.disabled ? "0.5" : "1";
+      }
+    }
+
+    // --- PERUBAHAN: ADMIN ---
+    // Fungsi untuk mengatur visibilitas UI berdasarkan status admin
+    function setupUIVisibility() {
+        if (!isAdmin) {
+            addDotBtn.style.display = 'none';
+            document.querySelector('.button-group').style.display = 'none';
+            saveBtn.style.display = 'none';
+            updateAllColorsBtn.style.display = 'none';
+            colorPicker.parentElement.style.display = 'none';
+            importOldDataBtn.style.display = 'none'; // Sembunyikan tombol impor untuk non-admin
+
+            deleteSelectedDotBtn.classList.add('toolbar-hidden');
+            changeSelectedDotColorBtn.classList.add('toolbar-hidden');
+        }
+    }
+
+    function getCssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+    // --- PERUBAHAN: Fungsi untuk beralih server ---
+    function switchServer(serverId) {
+        currentServerId = serverId;
+        console.log(`Switching to server: ${currentServerId}`);
+
+        if (unsubscribeDotsListener) {
+            unsubscribeDotsListener();
+        }
+
+        history = [];
+        historyIndex = -1;
+        updateUndoRedoButtons();
+
+        currentDotsRef = ref(db, `servers/${currentServerId}/dots`);
+        currentHistoryRef = ref(db, `servers/${currentServerId}/history`);
+
+        unsubscribeDotsListener = onValue(currentDotsRef, (snapshot) => {
+            const data = snapshot.val();
+            const newDots = data ? Object.values(data) : [];
+            
+            if (!isUndoRedoAction && !arraysEqual(dots, newDots)) {
+                dots = newDots;
+                if (history.length === 0) {
+                    history.push({
+                        dots: JSON.parse(JSON.stringify(dots)),
+                        action: 'initial_load',
+                        timestamp: new Date().toISOString()
+                    });
+                    historyIndex = 0;
+                }
+                drawGrid();
+                updateUndoRedoButtons();
+            } else {
+                dots = newDots;
+                drawGrid();
+            }
+        });
+    }
+
+    function saveToFirebase() {
+        if (!isAdmin) return;
+
+        const dotsObject = dots.reduce((acc, dot, index) => {
+            acc[index] = dot;
+            return acc;
+        }, {});
+        
+        set(currentDotsRef, dotsObject);
+        
+        if (!isUndoRedoAction) {
+            push(currentHistoryRef, {
+                timestamp: serverTimestamp(),
+                dots: dotsObject,
+                action: 'update'
+            });
+        }
+    }
+    
+    // Fungsi untuk membandingkan dua array dots
+    function arraysEqual(arr1, arr2) {
+        if (arr1.length !== arr2.length) return false;
+        
+        for (let i = 0; i < arr1.length; i++) {
+            const dot1 = arr1[i];
+            const dot2 = arr2[i];
+            
+            if (dot1.x !== dot2.x || dot1.y !== dot2.y || dot1.color !== dot2.color) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    // Fungsi untuk menggambar grid dan dots
+    function drawGrid() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      
+      if (isAdmin) {
+        const levels = [
+          { radius: 425, color: 'rgba(255, 0, 0, 0.05)' },
+          { radius: 350, color: 'rgba(0, 128, 0, 0.05)' },
+          { radius: 275, color: 'rgba(0, 0, 255, 0.05)' },
+          { radius: 200, color: 'rgba(255, 255, 0, 0.05)' },
+          { radius: 125, color: 'rgba(255, 0, 255, 0.05)' },
+          { radius: 50, color: 'rgba(0, 255, 255, 0.05)' },
+        ];
+
+        const centerX = offsetX + 500 * zoom;
+        const centerY = offsetY + 500 * zoom;
+
+        for (let i = 0; i < levels.length; i++) {
+          const level = levels[i];
+          ctx.fillStyle = level.color;
+          ctx.fillRect(
+            centerX - level.radius * zoom,
+            centerY - level.radius * zoom,
+            level.radius * 2 * zoom,
+            level.radius * 2 * zoom
+          );
+        }
+        
+        ctx.fillStyle = 'rgba(128, 0, 128, 0.05)';
+        ctx.fillRect(
+          centerX - 50 * zoom,
+          centerY - 50 * zoom,
+          100 * zoom,
+          100 * zoom
+        );
+      }
+      
+      const cols = 13, rows = 13, centerIndex = 6;
+      const baseCellSize = 75, baseCenterSize = 100;
+      function getCellSize(index) { return index === centerIndex ? baseCenterSize * zoom : baseCellSize * zoom; }
+      function getPosition(index) { let pos = 0; for (let i = 0; i < index; i++) { pos += getCellSize(i); } return pos; }
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const x = offsetX + getPosition(col); const y = offsetY + getPosition(row);
+          const w = getCellSize(col); const h = getCellSize(row);
+          ctx.fillStyle = (row === centerIndex && col === centerIndex) ? getCssVar('--center-cell-color') : getCssVar('--grid-cell-color');
+          ctx.fillRect(x, y, w, h); ctx.strokeStyle = getCssVar('--grid-border-color'); ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
+        }
+      }
+      
+      dots.forEach((dot, index) => {
+        const dotX = dot.x * zoom + offsetX; const dotY = (canvas.height - dot.y) * zoom + offsetY;
+        ctx.beginPath(); ctx.fillStyle = dot.color;
+        if (!isTouching && index === hoveredDot) {
+          ctx.arc(dotX, dotY - 5, 7, 0, Math.PI * 2); ctx.shadowColor = getCssVar('--hover-shadow-color'); ctx.shadowBlur = 8; ctx.shadowOffsetY = 3;
+        } else {
+          ctx.arc(dotX, dotY, 5, 0, Math.PI * 2); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+        }
+        ctx.fill(); ctx.strokeStyle = 'black'; ctx.lineWidth = 1; ctx.stroke();
+        if (selectedDot === index) {
+            ctx.beginPath(); ctx.arc(dotX, dotY, 9, 0, Math.PI * 2); ctx.strokeStyle = 'purple'; ctx.lineWidth = 2; ctx.stroke();
+        }
+        if (!isTouching && index === hoveredDot) { drawCoordinateTooltip(dotX, dotY - 15, `X: ${Math.round(dot.x)}, Y: ${Math.round(dot.y)}`); }
+      });
+      
+      if (searchHighlight) {
+        ctx.beginPath(); ctx.arc(searchHighlight.x * zoom + offsetX, (canvas.height - searchHighlight.y) * zoom + offsetY, 10, 0, Math.PI * 2);
+        ctx.strokeStyle = 'red'; ctx.lineWidth = 2; ctx.stroke();
+      }
+    }
+    
+    function drawCoordinateTooltip(x, y, text) {
+      ctx.font = '12px "Roboto", sans-serif'; const padding = 6; const textWidth = ctx.measureText(text).width;
+      const boxWidth = textWidth + padding * 2; const boxHeight = 22; let drawX = x - boxWidth / 2; let drawY = y - boxHeight / 2;
+      if (drawX < 0) drawX = 0; if (drawX + boxWidth > canvas.width) drawX = canvas.width - boxWidth;
+      if (drawY < 0) drawY = y + 20; ctx.fillStyle = getCssVar('--tooltip-bg');
+      ctx.fillRect(drawX, drawY, boxWidth, boxHeight); ctx.fillStyle = getCssVar('--tooltip-text');
+      ctx.fillText(text, drawX + padding, drawY + 15);
+    }
+    
+    function showContextMenu(x, y) { contextMenu.style.display = 'block'; contextMenu.style.left = `${x}px`; contextMenu.style.top = `${y}px`; }
+    function hideContextMenu() { contextMenu.style.display = 'none'; }
+
+    function findNearestDot(x, y) {
+      for (let i = 0; i < dots.length; i++) {
+        const dotX = dots[i].x * zoom + offsetX; const dotY = (canvas.height - dots[i].y) * zoom + offsetY;
+        if (Math.hypot(x - dotX, y - dotY) < 10) { return i; }
+      }
+      return -1;
+    }
+
+    function updateToolbarButtonsVisibility() {
+        if (selectedDot !== null && isAdmin) {
+            deleteSelectedDotBtn.classList.remove('toolbar-hidden');
+            changeSelectedDotColorBtn.classList.remove('toolbar-hidden');
+        } else {
+            deleteSelectedDotBtn.classList.add('toolbar-hidden');
+            changeSelectedDotColorBtn.classList.add('toolbar-hidden');
+        }
+    }
+
+    function handlePointerDown(e) {
+        if (e.type === 'touchstart') { e.preventDefault(); isTouching = true; } else { isTouching = false; }
+        hideContextMenu(); searchHighlight = null;
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const mouseX = clientX - rect.left; const mouseY = clientY - rect.top;
+        lastMouseDownX = mouseX; lastMouseDownY = mouseY;
+        dotUnderMouseDownIndex = findNearestDot(mouseX, mouseY);
+        
+        if (e.touches && e.touches.length === 2) {
+            lastPinchDistance = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+            isClicking = false; isDragging = false; clearTimeout(longPressTimer);
+        } else {
+            if (isAdmin) {
+                longPressTimer = setTimeout(() => {
+                    if (dotUnderMouseDownIndex !== -1) {
+                        selectedDot = dotUnderMouseDownIndex;
+                        updateToolbarButtonsVisibility();
+                        showContextMenu(clientX, clientY);
+                        drawGrid();
+                    }
+                    isClicking = false;
+                }, longPressThreshold);
+            }
+            isClicking = true; isDragging = false;
+        }
+
+        if (dotUnderMouseDownIndex === -1 && selectedDot !== null) {
+            selectedDot = null; updateToolbarButtonsVisibility(); drawGrid();
+        }
+    }
+
+    function handlePointerMove(e) {
+        if (e.type === 'touchmove') { e.preventDefault(); }
+        if (!isClicking && !isDragging && (!e.touches || e.touches.length === 0)) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
+            const currentHover = findNearestDot(mouseX, mouseY);
+            if (currentHover !== hoveredDot) { hoveredDot = currentHover; drawGrid(); }
+            canvas.style.cursor = currentHover !== -1 ? 'pointer' : 'grab';
+            return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const mouseX = clientX - rect.left; const mouseY = clientY - rect.top;
+        if (e.touches && e.touches.length === 2) {
+            clearTimeout(longPressTimer); isClicking = false; isDragging = false;
+            const newPinchDistance = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+            if (lastPinchDistance === null) { lastPinchDistance = newPinchDistance; return; }
+            const scaleFactor = newPinchDistance / lastPinchDistance; const oldZoom = zoom;
+            zoom = Math.min(3, Math.max(0.5, zoom * scaleFactor));
+            const pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+            const pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+            offsetX = pinchCenterX - ((pinchCenterX - offsetX) * (zoom / oldZoom));
+            offsetY = pinchCenterY - ((pinchCenterY - offsetY) * (zoom / oldZoom));
+            lastPinchDistance = newPinchDistance; drawGrid(); return;
+        }
+        if (isClicking) {
+            const distance = Math.hypot(mouseX - lastMouseDownX, mouseY - lastMouseDownY);
+            if (distance > 5) {
+                clearTimeout(longPressTimer); isClicking = false;
+                if (dotUnderMouseDownIndex === -1) {
+                    isDragging = true; offsetX += mouseX - lastMouseDownX; offsetY += mouseY - lastMouseDownY;
+                    lastMouseDownX = mouseX; lastMouseDownY = mouseY; canvas.style.cursor = 'grabbing'; drawGrid();
+                }
+            }
+        } else if (isDragging) {
+            offsetX += mouseX - lastMouseDownX; offsetY += mouseY - lastMouseDownY;
+            lastMouseDownX = mouseX; lastMouseDownY = mouseY; canvas.style.cursor = 'grabbing'; drawGrid();
+        } else {
+            const currentHover = findNearestDot(mouseX, mouseY);
+            if (currentHover !== hoveredDot) { hoveredDot = currentHover; drawGrid(); }
+            canvas.style.cursor = currentHover !== -1 ? 'pointer' : 'grab';
+        }
+    }
+
+    function handlePointerUp(e) {
+        clearTimeout(longPressTimer);
+        if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; } 
+        else if (isClicking) {
+            isClicking = false;
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.changedTouches ? e.changedTouches[0].clientX - rect.left : e.clientX - rect.left;
+            const clickY = e.changedTouches ? e.changedTouches[0].clientY - rect.top : e.clientY - rect.top;
+            const dotClickedIndex = findNearestDot(clickX, clickY);
+
+            if (dotClickedIndex !== -1 && dotUnderMouseDownIndex !== null) {
+                selectedDot = dotClickedIndex;
+                updateToolbarButtonsVisibility();
+                drawGrid();
+            } 
+        }
+        dotUnderMouseDownIndex = null; lastPinchDistance = null; isTouching = false;
+    }
+    
+    canvas.addEventListener('mousedown', handlePointerDown);
+    canvas.addEventListener('mousemove', handlePointerMove);
+    canvas.addEventListener('mouseup', handlePointerUp);
+    canvas.addEventListener('mouseleave', () => { clearTimeout(longPressTimer); isClicking = false; isDragging = false; hoveredDot = null; dotUnderMouseDownIndex = null; drawGrid(); hideContextMenu(); canvas.style.cursor = 'grab'; });
+    canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+    canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
+    canvas.addEventListener('touchend', handlePointerUp);
+    canvas.addEventListener('touchcancel', handlePointerUp);
+    canvas.addEventListener('wheel', (e) => { e.preventDefault(); const zoomFactor = 0.1; const oldZoom = zoom; const mouseX = e.offsetX; const mouseY = e.offsetY; if (e.deltaY < 0) { zoom = Math.min(3, zoom + zoomFactor); } else { zoom = Math.max(0.5, zoom - zoomFactor); } offsetX = mouseX - ((mouseX - offsetX) * (zoom / oldZoom)); offsetY = mouseY - ((mouseY - offsetY) * (zoom / oldZoom)); drawGrid(); });
+    document.addEventListener('click', (e) => { if (!contextMenu.contains(e.target)) { hideContextMenu(); } });
+
+    deleteOption.addEventListener('click', () => { 
+      if (selectedDot !== null && isAdmin) { 
+        const deletedDot = dots[selectedDot];
+        dots.splice(selectedDot, 1); 
+        addToHistory('delete', { index: selectedDot, dot: deletedDot });
+        saveToFirebase(); 
+        selectedDot = null; 
+        updateToolbarButtonsVisibility(); 
+        drawGrid(); 
+      } 
+      hideContextMenu(); 
+    });
+    
+    changeColorOption.addEventListener('click', () => { 
+      if (selectedDot !== null && isAdmin) { 
+        const oldColor = dots[selectedDot].color;
+        dots[selectedDot].color = colorPicker.value; 
+        addToHistory('change_color', { index: selectedDot, oldColor, newColor: colorPicker.value });
+        saveToFirebase(); 
+        selectedDot = null; 
+        updateToolbarButtonsVisibility(); 
+        drawGrid(); 
+      } 
+      hideContextMenu(); 
+    });
+    
+    deleteSelectedDotBtn.addEventListener('click', () => { 
+      if (selectedDot !== null && isAdmin) { 
+        const deletedDot = dots[selectedDot];
+        dots.splice(selectedDot, 1); 
+        addToHistory('delete', { index: selectedDot, dot: deletedDot });
+        saveToFirebase(); 
+        selectedDot = null; 
+        updateToolbarButtonsVisibility(); 
+        drawGrid(); 
+      } 
+    });
+    
+    changeSelectedDotColorBtn.addEventListener('click', () => { 
+      if (selectedDot !== null && isAdmin) { 
+        const oldColor = dots[selectedDot].color;
+        dots[selectedDot].color = colorPicker.value;
+        addToHistory('change_color', { index: selectedDot, oldColor, newColor: colorPicker.value });
+        saveToFirebase(); 
+        selectedDot = null; 
+        updateToolbarButtonsVisibility(); 
+        drawGrid(); 
+      } 
+    });
+    
+    // --- PERUBAHAN: ADMIN ---
+    if(isAdmin) {
+        undoButton.addEventListener('click', () => {
+          undo();
+        });
+        
+        redoButton.addEventListener('click', () => {
+          redo();
+        });
+
+        window.addEventListener('keydown', (e) => { 
+          if ((e.ctrlKey || e.metaKey) && e.key === 'z') { 
+            e.preventDefault(); 
+            undo();
+          } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+            e.preventDefault();
+            redo();
+          }
+        });
+        
+        addDotBtn.addEventListener('click', () => { 
+          const x = parseFloat(searchX.value); 
+          const y = parseFloat(searchY.value); 
+          if (isNaN(x) || isNaN(y)) { 
+            alert("Silakan masukkan koordinat X dan Y yang valid."); 
+            return; 
+          } 
+          
+          const color = getColorByLevel(x, y);
+          
+          const newDot = { x, y, color };
+          dots.push(newDot); 
+          addToHistory('add', { dot: newDot });
+          saveToFirebase(); 
+          searchHighlight = null; 
+          selectedDot = null; 
+          updateToolbarButtonsVisibility(); 
+          drawGrid(); 
+        });
+        
+        updateAllColorsBtn.addEventListener('click', () => {
+          if (confirm("Yakin ingin mengubah warna semua titik berdasarkan levelnya?")) {
+            const oldDots = JSON.parse(JSON.stringify(dots));
+            
+            dots.forEach(dot => {
+              dot.color = getColorByLevel(dot.x, dot.y);
+            });
+            
+            addToHistory('update_all_colors', { oldDots });
+            
+            saveToFirebase();
+            drawGrid();
+            
+            alert(`Berhasil mengupdate warna ${dots.length} titik!`);
+          }
+        });
+        
+        saveBtn.addEventListener('click', () => { 
+          const json = JSON.stringify(dots, null, 2); 
+          const blob = new Blob([json], { type: 'application/json' }); 
+          const url = URL.createObjectURL(blob); 
+          const a = document.createElement('a'); 
+          a.href = url; 
+          a.download = 'dots_data.json'; 
+          a.click(); 
+          URL.revokeObjectURL(url); 
+        });
+
+        // --- LOGIKA IMPORT DATA LAMA (BARU) ---
+        importOldDataBtn.addEventListener('click', async () => {
+            if (confirm("Ini akan mengimpor data lama (dari '/dots' di root Firebase) dan MENGGANTI data titik server yang sedang aktif. Lanjutkan?")) {
+                try {
+                    // 1. Fetch data from the old /dots path
+                    const snapshot = await get(oldRootDotsRef); // Menggunakan get() untuk baca satu kali
+                    const oldDotsData = snapshot.val();
+
+                    if (oldDotsData) {
+                        // Firebase Realtime Database dapat mengembalikan objek jika hanya ada angka sebagai kunci
+                        // Pastikan untuk mengonversinya menjadi array jika perlu
+                        const importedDots = Array.isArray(oldDotsData) ? oldDotsData : Object.values(oldDotsData);
+
+                        // 2. Kosongkan history lokal.
+                        // Ini memastikan bahwa ketika Firebase memperbarui, itu akan menjadi entri history pertama.
+                        history = [];
+                        historyIndex = -1;
+                        isUndoRedoAction = false; // Pastikan ini false agar onValue menambahkan ke history
+
+                        // 3. Set data yang diimpor ke path dots server saat ini.
+                        // Ini akan memicu listener 'onValue' untuk currentDotsRef.
+                        await set(currentDotsRef, importedDots);
+
+                        // Listener 'onValue' kemudian akan:
+                        // a. Memperbarui array 'dots' lokal dengan 'importedDots'.
+                        // b. Memanggil drawGrid().
+                        // c. Menambahkan 'importedDots' sebagai entri pertama di 'history' (karena history dikosongkan dan isUndoRedoAction adalah false).
+                        // d. Memperbarui tombol undo/redo.
+
+                        console.log("Data lama berhasil diimpor!");
+                        alert("Data lama berhasil diimpor ke server saat ini!");
+                    } else {
+                        alert("Tidak ada data lama yang ditemukan di lokasi Firebase sebelumnya (yaitu, '/dots').");
+                    }
+                } catch (error) {
+                    console.error("Kesalahan saat mengimpor data lama:", error);
+                    alert("Gagal mengimpor data lama. Cek konsol browser untuk detail.");
+                }
+            }
+        });
+        // --- AKHIR LOGIKA IMPORT DATA LAMA ---
+    }
+
+    searchBtn.addEventListener('click', () => {
+      const sx = parseFloat(searchX.value);
+      const sy = parseFloat(searchY.value);
+      if (isNaN(sx) || isNaN(sy)) {
+        alert("Harap masukkan koordinat X dan Y yang valid untuk mencari.");
+        return;
+      }
+
+      searchHighlight = { x: sx, y: sy };
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      offsetX = centerX - sx * zoom;
+      offsetY = centerY - (canvas.height - sy) * zoom;
+
+      drawGrid();
+    });
+    
+    searchX.addEventListener('keydown', handleEnterKey);
+    searchY.addEventListener('keydown', handleEnterKey);
+
+    function handleEnterKey(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        
+        const currentTime = Date.now();
+        
+        if (isAdmin && (currentTime - lastEnterPressTime < doubleEnterThreshold)) {
+          addDotBtn.click();
+          lastEnterPressTime = 0;
+        } else {
+          searchBtn.click();
+          lastEnterPressTime = currentTime;
+        }
+      }
+    }
+    
+    themeToggle.addEventListener('click', () => { 
+      const currentTheme = document.body.getAttribute('data-theme'); 
+      if (currentTheme === 'dark') { 
+        document.body.removeAttribute('data-theme'); 
+        themeToggle.textContent = 'Dark Mode'; 
+        localStorage.setItem('theme', 'light'); 
+      } else { 
+        document.body.setAttribute('data-theme', 'dark'); 
+        themeToggle.textContent = 'Light Mode'; 
+        localStorage.setItem('theme', 'dark'); 
+      } 
+      drawGrid(); 
+    });
+    
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') { 
+      document.body.setAttribute('data-theme', 'dark'); 
+      themeToggle.textContent = 'Light Mode'; 
+    } else { 
+      document.body.removeAttribute('data-theme'); 
+      themeToggle.textContent = 'Dark Mode'; 
+    }
+
+    function initializeServerSelector() {
+        SERVER_IDS.forEach(id => {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = `${id}`;
+            serverSelect.appendChild(option);
+        });
+
+        const initialServer = urlParams.get('server') || SERVER_IDS[0];
+        if (SERVER_IDS.includes(initialServer)) {
+            currentServerId = initialServer;
+            serverSelect.value = initialServer;
+        } else {
+            currentServerId = SERVER_IDS[0];
+            serverSelect.value = SERVER_IDS[0];
+        }
+        
+        serverSelect.addEventListener('change', (event) => {
+            switchServer(event.target.value);
+        });
+    }
+
+    initializeServerSelector();
+    switchServer(currentServerId);
+    setupUIVisibility();
+    updateToolbarButtonsVisibility();
+  </script>
+</body>
+</html>
